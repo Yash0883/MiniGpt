@@ -13,7 +13,7 @@ class MiniGPT(nn.Module):
             config.EMBED_DIM
         )
 
-        self.postion_embedding = PositionalEmbedding(
+        self.position_embedding = PositionalEmbedding(
             config.MAX_SEQ_LEN,
             config.EMBED_DIM
         )
@@ -36,7 +36,7 @@ class MiniGPT(nn.Module):
     def forward(self, token_ids):
 
         token = self.token_embedding(token_ids)
-        position = self.postion_embedding(token_ids)
+        position = self.position_embedding(token_ids)
 
         x = token+position
         x = self.blocks(x)

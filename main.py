@@ -63,24 +63,24 @@
 # print(out.shape)
 
 
-import torch
-import config
+# import torch
+# import config
 
-from model.gpt import MiniGPT
+# from model.gpt import MiniGPT
 
-model = MiniGPT().to(config.DEVICE)
+# model = MiniGPT().to(config.DEVICE)
 
-dummy = torch.randint(
-    0,
-    config.VOCAB_SIZE,
-    (2, 10),
-    device = config.DEVICE
-)
+# dummy = torch.randint(
+#     0,
+#     config.VOCAB_SIZE,
+#     (2, 10),
+#     device = config.DEVICE
+# )
 
-out = model(dummy) 
+# out = model(dummy) 
 
-print("Input:", dummy.shape)
-print("Output:", out.shape)
+# print("Input:", dummy.shape)
+# print("Output:", out.shape)
 
 
 # from model.transformer_block import TransformerBlock
@@ -92,3 +92,20 @@ print("Output:", out.shape)
 # out = block(x)
 
 # print(out.shape)
+
+
+
+
+
+from training.dataset import TextDataset
+
+tokens = [1,2,3,4,5,6,7]
+
+dataset = TextDataset(tokens,4)
+
+print(len(dataset))
+
+x,y = dataset[0]
+
+print(x)
+print(y)

@@ -29,11 +29,15 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 from tokenizers import Tokenizer
+import time 
 
-import config
+from config import GPTConfig
 
 from model.gpt import MiniGPT
 from training.dataset import TextDataset
+
+
+cfg = GPTConfig()
 
 
 # --------------------------------------------------
@@ -70,7 +74,7 @@ print(f"Total Tokens : {len(token_ids)}")
 
 dataset = TextDataset(
     token_ids=token_ids,
-    context_length=config.MAX_SEQ_LEN
+    context_length=cfg.max_seq_len
 )
 
 
@@ -80,7 +84,7 @@ dataset = TextDataset(
 
 loader = DataLoader(
     dataset,
-    batch_size=config.BATCH_SIZE,
+    batch_size=cfg.batch_size,
     shuffle=True
 )
 
@@ -89,9 +93,23 @@ loader = DataLoader(
 # Create Model
 # --------------------------------------------------
 
-model = MiniGPT().to(config.DEVICE)
+model = MiniGPT(cfg).to(cfg.device)
 
-print(f"Using Device : {config.DEVICE}")
+print(f"Using Device : {cfg.device}")
+
+# Verify GPT-style weight tying between the token embedding and LM head.
+embedding_weight = model.token_embedding.embedding.weight
+lm_head_weight = model.lm_head.weight
+
+weights_are_shared = embedding_weight is lm_head_weight
+storage_is_shared = embedding_weight.data_ptr() == lm_head_weight.data_ptr()
+
+print(f"Weight objects shared : {weights_are_shared}")
+print(f"Weight storage shared : {storage_is_shared}")
+
+assert weights_are_shared and storage_is_shared, (
+    "Token embedding and LM head are not sharing weights"
+)
 
 
 # --------------------------------------------------
@@ -100,7 +118,7 @@ print(f"Using Device : {config.DEVICE}")
 
 optimizer = torch.optim.AdamW(
     model.parameters(),
-    lr=config.LEARNING_RATE
+    lr=cfg.learning_rate
 )
 
 criterion = nn.CrossEntropyLoss()
@@ -117,46 +135,89 @@ os.makedirs("checkpoints", exist_ok=True)
 # Training Loop
 # --------------------------------------------------
 
-for epoch in range(config.EPOCHS):
+# --------------------------------------------------
+# Training Loop
+# --------------------------------------------------
+
+for epoch in range(cfg.epochs):
 
     model.train()
 
     total_loss = 0.0
 
-    for x, y in loader:
+    epoch_start = time.time()
 
-        x = x.to(config.DEVICE)
-        y = y.to(config.DEVICE)
+    for batch_idx, (x, y) in enumerate(loader):
 
-        # Reset gradients
+        batch_start = time.time()
+
+        x = x.to(cfg.device)
+        y = y.to(cfg.device)
+
         optimizer.zero_grad()
 
-        # Forward pass
+        # ----------------------------
+        # Forward
+        # ----------------------------
+        forward_start = time.time()
+
         logits = model(x)
 
-        # Reshape for CrossEntropyLoss
         loss = criterion(
-            logits.view(-1, config.VOCAB_SIZE),
+            logits.view(-1, cfg.vocab_size),
             y.view(-1)
         )
 
-        # Backpropagation
+        forward_end = time.time()
+
+        # ----------------------------
+        # Backward
+        # ----------------------------
+        backward_start = time.time()
+
         loss.backward()
 
-        # Update weights
         optimizer.step()
 
+        backward_end = time.time()
+
         total_loss += loss.item()
+
+        batch_end = time.time()
+
+        # Print only first 5 batches
+        if batch_idx < 5:
+
+            print(
+                f"\nBatch {batch_idx + 1}"
+            )
+
+            print(
+                f"Forward : {forward_end-forward_start:.4f}s"
+            )
+
+            print(
+                f"Backward: {backward_end-backward_start:.4f}s"
+            )
+
+            print(
+                f"Total    : {batch_end-batch_start:.4f}s"
+            )
+
+    epoch_end = time.time()
 
     avg_loss = total_loss / len(loader)
 
     print(
-        f"Epoch [{epoch + 1}/{config.EPOCHS}] "
+        f"\nEpoch [{epoch + 1}/{cfg.epochs}] "
         f"Loss: {avg_loss:.4f}"
     )
 
-    # Save checkpoint after every epoch
-    checkpoint_path = f"checkpoints/minigpt_epoch_{epoch + 1}.pth"
+    print(
+        f"Epoch Time : {(epoch_end-epoch_start)/60:.2f} minutes"
+    )
+
+    checkpoint_path = f"checkpoints/minigpt_epoch_{epoch+1}.pth"
 
     torch.save(
         {
@@ -169,6 +230,5 @@ for epoch in range(config.EPOCHS):
     )
 
     print(f"Checkpoint saved -> {checkpoint_path}")
-
 
 print("\nTraining Complete!")

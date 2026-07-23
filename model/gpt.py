@@ -1,46 +1,121 @@
-import torch.nn as nn
-import config
+"""
+gpt.py
 
-from .embeddings import TokenEmbedding, PositionalEmbedding
+MiniGPT Model
+
+Architecture:
+
+Input Tokens
+      │
+      ▼
+Token Embedding
+      │
+      ▼
+Transformer Blocks
+      │
+      │  (RoPE is applied to Q and K inside attention)
+      ▼
+      │
+      ▼
+      RMSNorm
+      │
+      ▼
+LM Head (Weight Tied)
+      │
+      ▼
+Vocabulary Logits
+"""
+
+import torch.nn as nn
+from config import GPTConfig
+
+from .embeddings import TokenEmbedding
 from .transformer_block import TransformerBlock
 
+
 class MiniGPT(nn.Module):
-    def __init__(self):
+
+    def __init__(self, config=None):
         super().__init__()
 
+        self.config = config or GPTConfig()
+
+        # ---------------------------------
+        # Token Embedding
+        # ---------------------------------
         self.token_embedding = TokenEmbedding(
-            config.VOCAB_SIZE,
-            config.EMBED_DIM
+            self.config.vocab_size,
+            self.config.embed_dim
         )
 
-        self.position_embedding = PositionalEmbedding(
-            config.MAX_SEQ_LEN,
-            config.EMBED_DIM
-        )
-
+        # ---------------------------------
+        # Transformer Blocks
+        # ---------------------------------
         self.blocks = nn.Sequential(
             *[
-                TransformerBlock(config.EMBED_DIM)
-                for _ in range(config.NUM_LAYERS)
+                TransformerBlock(self.config)
+                for _ in range(self.config.num_layers)
             ]
-
         )
 
-        self.ln = nn.LayerNorm(config.EMBED_DIM)
+        # ---------------------------------
+        # Final RMSNorm
+        # ---------------------------------
+        self.norm = nn.RMSNorm(self.config.embed_dim, eps=1e-5)
 
+        # ---------------------------------
+        # Language Modeling Head
+        # ---------------------------------
         self.lm_head = nn.Linear(
-            config.EMBED_DIM,
-            config.VOCAB_SIZE
+            self.config.embed_dim,
+            self.config.vocab_size,
+            bias=False
         )
 
-    def forward(self, token_ids):
+        # ---------------------------------
+        # Weight Tying
+        # GPT-2 Style
+        # ---------------------------------
+        self.lm_head.weight = self.token_embedding.embedding.weight
 
+    def forward(self, token_ids, past_key_values=None, use_cache=False):
+
+        # Token Embeddings
         token = self.token_embedding(token_ids)
-        position = self.position_embedding(token_ids)
 
-        x = token+position
-        x = self.blocks(x)
-        x = self.ln(x)
+        # Transformer. The regular path keeps the original simple API used
+        # during training. The cache path is used by autoregressive generation.
+        if not use_cache:
+            x = self.blocks(token)
+        else:
+            if past_key_values is None:
+                past_key_values = [None] * len(self.blocks)
+
+            if len(past_key_values) != len(self.blocks):
+                raise ValueError("One KV cache entry is required per transformer block")
+
+            position_offset = 0
+            if past_key_values[0] is not None:
+                position_offset = past_key_values[0][0].size(-2)
+
+            presents = []
+            x = token
+            for block, past_key_value in zip(self.blocks, past_key_values):
+                x, present_key_value = block(
+                    x,
+                    past_key_value=past_key_value,
+                    position_offset=position_offset,
+                    use_cache=True,
+                )
+                presents.append(present_key_value)
+
+        # Final Normalization
+        x = self.norm(x)
+
+        # Vocabulary Logits
         logits = self.lm_head(x)
+
+        if use_cache:
+            return logits, presents
 
         return logits

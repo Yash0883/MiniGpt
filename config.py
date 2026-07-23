@@ -1,37 +1,37 @@
 import torch
 
-# ===============================
-# DATA
-# ===============================
 
-VOCAB_SIZE = 8000
-MAX_SEQ_LEN = 128
+class GPTConfig:
+    """Configuration for one MiniGPT model and training run."""
 
-# ===============================
-# MODEL
-# ===============================
+    def __init__(
+        self,
+        vocab_size=8000,
+        max_seq_len=128,
+        embed_dim=256,
+        num_heads=8,
+        num_layers=6,
+        batch_size=32,
+        learning_rate=3e-4,
+        epochs=10,
+        device=None,
+    ):
+        self.vocab_size = vocab_size
+        self.max_seq_len = max_seq_len
+        self.embed_dim = embed_dim
+        self.num_heads = num_heads
+        self.num_layers = num_layers
+        self.ffn_hidden = embed_dim * 4
+        self.dropout = 0.1
+        self.batch_size = batch_size
+        self.learning_rate = learning_rate
+        self.epochs = epochs
+        self.device = device or self._default_device()
 
-EMBED_DIM = 256
-NUM_HEADS = 8
-NUM_LAYERS = 6
-FFN_HIDDEN = EMBED_DIM * 4
-DROPOUT = 0.1
-
-# ===============================
-# TRAINING
-# ===============================
-
-BATCH_SIZE = 32
-LEARNING_RATE = 3e-4
-EPOCHS = 10
-
-# ===============================
-# DEVICE
-# ===============================
-
-if torch.backends.mps.is_available():
-    DEVICE = torch.device("mps")
-elif torch.cuda.is_available():
-    DEVICE = torch.device("cuda")
-else:
-    DEVICE = torch.device("cpu")
+    @staticmethod
+    def _default_device():
+        if torch.backends.mps.is_available():
+            return torch.device("mps")
+        if torch.cuda.is_available():
+            return torch.device("cuda")
+        return torch.device("cpu")

@@ -15,12 +15,12 @@ class TextDataset(Dataset):
 
     def __init__(self, token_ids, context_length):
 
-        self.token_ids = token_ids
+        self.token_ids = torch.as_tensor(token_ids, dtype=torch.long)
         self.context_length = context_length
 
     def __len__(self):
 
-        return len(self.token_ids) - self.context_length
+        return self.token_ids.numel() - self.context_length
 
     def __getitem__(self, idx):
 
@@ -32,7 +32,4 @@ class TextDataset(Dataset):
             idx + 1 : idx + self.context_length + 1
         ]
 
-        return (
-            torch.tensor(x, dtype=torch.long),
-            torch.tensor(y, dtype=torch.long)
-        )
+        return x, y
